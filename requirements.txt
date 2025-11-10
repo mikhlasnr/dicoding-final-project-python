@@ -1,10 +1,20 @@
-Babel==2.12.1
-folium==0.15.1
-ipython==8.18.1
-matplotlib==3.8.0
-numpy==1.25.2
+# Core Data Processing
 pandas==2.1.4
+numpy==1.25.2
+
+# Visualization (Notebook)
+matplotlib==3.8.0
 seaborn==0.13.0
-streamlit==1.30.0
+
+# Visualization (Dashboard)
 plotly==5.18.0
+
+# Geospatial Visualization
+folium==0.15.1
+
+# Dashboard Framework
+streamlit==1.30.0
 streamlit-folium==0.15.1
+
+# Jupyter Notebook Support
+ipython==8.18.1

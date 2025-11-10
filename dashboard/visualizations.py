@@ -194,8 +194,8 @@ def create_customer_heatmap(customer_geo, customer_by_city):
     if heat_data:
         HeatMap(heat_data, radius=15, blur=10, max_zoom=1).add_to(brazil_map)
 
-        top_5_cities = customer_by_city.nlargest(5, 'order_count')
-        for idx, row in top_5_cities.iterrows():
+        top_10_cities = customer_by_city.nlargest(10, 'order_count')
+        for idx, row in top_10_cities.iterrows():
             city_geo = customer_geo[
                 (customer_geo['customer_city'] == row['customer_city']) &
                 (customer_geo['customer_state'] == row['customer_state'])
@@ -248,4 +248,169 @@ def create_seller_heatmap(seller_by_city):
                 ).add_to(seller_map)
 
     return seller_map
+
+
+def plot_gap_top_cities(gap_with_sellers, top_n=20):
+    """Plot Top N kota dengan gap supply-demand tertinggi"""
+    if len(gap_with_sellers) == 0:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Tidak ada data untuk ditampilkan",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(
+            title=f'Top {top_n} Kota dengan Gap Supply-Demand Tertinggi',
+            height=400
+        )
+        return fig
+
+    gap_top = gap_with_sellers.head(top_n).copy()
+    gap_top['city_label'] = gap_top['customer_city'].str.title() + ', ' + gap_top['customer_state']
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=gap_top['orders_per_seller'],
+        y=gap_top['city_label'],
+        orientation='h',
+        marker=dict(color='#FF6B6B'),
+        text=[f"{x:.1f}" for x in gap_top['orders_per_seller']],
+        textposition='outside'
+    ))
+    fig.update_layout(
+        title=f'Top {top_n} Kota dengan Gap Supply-Demand Tertinggi',
+        xaxis_title='Orders per Seller',
+        yaxis_title='Kota',
+        height=max(400, top_n * 30),
+        yaxis={'categoryorder': 'total ascending'}
+    )
+    return fig
+
+
+def plot_gap_no_seller_cities(gap_without_sellers, top_n=10):
+    """Plot Top N kota tanpa seller (peluang first-mover)"""
+    gap_no_seller = gap_without_sellers.head(top_n).copy()
+    gap_no_seller['city_label'] = gap_no_seller['customer_city'].str.title() + ', ' + gap_no_seller['customer_state']
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=gap_no_seller['order_count'],
+        y=gap_no_seller['city_label'],
+        orientation='h',
+        marker=dict(color='#4ECDC4'),
+        text=[f"{x:,.0f}" for x in gap_no_seller['order_count']],
+        textposition='outside'
+    ))
+    fig.update_layout(
+        title=f'Top {top_n} Kota Tanpa Seller (Peluang First-Mover)',
+        xaxis_title='Jumlah Order',
+        yaxis_title='Kota',
+        height=max(400, top_n * 40),
+        yaxis={'categoryorder': 'total ascending'}
+    )
+    return fig
+
+
+def plot_gap_comparison(gap_with_sellers, top_n=10):
+    """Plot perbandingan Orders vs Sellers untuk top N kota dengan gap tertinggi"""
+    if len(gap_with_sellers) == 0:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Tidak ada data untuk ditampilkan",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(
+            title=f'Perbandingan Orders vs Sellers (Top {top_n} Kota dengan Gap Tertinggi)',
+            height=500
+        )
+        return fig
+
+    top_gap = gap_with_sellers.head(top_n).copy()
+    top_gap['city_label'] = top_gap['customer_city'].str.title() + ', ' + top_gap['customer_state']
+
+    # Normalize untuk comparison (scale orders dan sellers ke 0-100)
+    orders_normalized = (top_gap['order_count'] / top_gap['order_count'].max()) * 100
+    sellers_normalized = (top_gap['seller_count'] / top_gap['seller_count'].max()) * 100
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        name='Orders (Normalized)',
+        x=top_gap['city_label'],
+        y=orders_normalized,
+        marker_color='#72BCD4',
+        text=[f"{x:.1f}" for x in orders_normalized],
+        textposition='outside'
+    ))
+
+    fig.add_trace(go.Bar(
+        name='Sellers (Normalized)',
+        x=top_gap['city_label'],
+        y=sellers_normalized,
+        marker_color='#4C9A2A',
+        text=[f"{x:.1f}" for x in sellers_normalized],
+        textposition='outside'
+    ))
+
+    fig.update_layout(
+        title=f'Perbandingan Orders vs Sellers (Top {top_n} Kota dengan Gap Tertinggi)',
+        xaxis_title='Kota',
+        yaxis_title='Nilai Normalized (0-100)',
+        barmode='group',
+        height=500,
+        xaxis={'tickangle': -45}
+    )
+    return fig
+
+
+def plot_gap_categories_distribution(gap_plot):
+    """Plot distribusi kategori gap supply-demand"""
+    if len(gap_plot) == 0 or 'gap_category' not in gap_plot.columns:
+        # Return empty figure jika tidak ada data
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Tidak ada data untuk ditampilkan",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(
+            title='Distribusi Kategori Gap Supply-Demand',
+            height=400
+        )
+        return fig
+
+    gap_categories = gap_plot['gap_category'].value_counts().sort_index()
+
+    if len(gap_categories) == 0:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Tidak ada data untuk ditampilkan",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(
+            title='Distribusi Kategori Gap Supply-Demand',
+            height=400
+        )
+        return fig
+
+    colors = ['#95E1D3', '#FCE38A', '#F38181', '#AA96DA']
+    color_map = {cat: colors[i % len(colors)] for i, cat in enumerate(gap_categories.index)}
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=[str(cat) for cat in gap_categories.index],
+        y=gap_categories.values,
+        marker=dict(color=[color_map[cat] for cat in gap_categories.index]),
+        text=[f"{x}" for x in gap_categories.values],
+        textposition='outside'
+    ))
+    fig.update_layout(
+        title='Distribusi Kategori Gap Supply-Demand',
+        xaxis_title='Kategori Gap',
+        yaxis_title='Jumlah Kota',
+        height=400
+    )
+    return fig
 

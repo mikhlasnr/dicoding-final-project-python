@@ -161,5 +161,34 @@ def prepare_geospatial_data(filtered_orders, geolocation_df, sellers_df):
     gap_df['gap_ratio'] = gap_df['order_count'] / gap_df['seller_count'].replace(0, np.nan)
     gap_df = gap_df[gap_df['gap_ratio'].notna()].sort_values('gap_ratio', ascending=False)
 
-    return customer_by_city, seller_by_city, customer_geo, gap_df
+    # Buat gap_with_sellers dan gap_without_sellers untuk visualisasi lengkap
+    gap_df_full = customer_by_city.merge(
+        seller_by_city,
+        left_on=['customer_city', 'customer_state'],
+        right_on=['seller_city', 'seller_state'],
+        how='left',
+        suffixes=('_customer', '_seller')
+    )
+    gap_df_full['seller_count'] = gap_df_full['seller_count'].fillna(0)
+    gap_df_full['orders_per_seller'] = gap_df_full['order_count'] / gap_df_full['seller_count'].replace(0, np.nan)
+
+    # Pisahkan kota dengan seller dan tanpa seller
+    gap_with_sellers = gap_df_full[gap_df_full['seller_count'] > 0].copy()
+    gap_with_sellers = gap_with_sellers.sort_values('orders_per_seller', ascending=False)
+
+    gap_without_sellers = gap_df_full[gap_df_full['seller_count'] == 0].copy()
+    gap_without_sellers = gap_without_sellers.sort_values('order_count', ascending=False)
+
+    # Buat gap_plot untuk kategori gap
+    gap_plot = gap_with_sellers.copy()
+    if len(gap_plot) > 0:
+        gap_plot['gap_category'] = pd.cut(
+            gap_plot['orders_per_seller'],
+            bins=[0, 20, 50, 100, float('inf')],
+            labels=['Low (<20)', 'Medium (20-50)', 'High (50-100)', 'Very High (>100)']
+        )
+    else:
+        gap_plot['gap_category'] = pd.Series(dtype='category')
+
+    return customer_by_city, seller_by_city, customer_geo, gap_df, gap_with_sellers, gap_without_sellers, gap_plot
 

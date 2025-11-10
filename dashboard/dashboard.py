@@ -6,7 +6,8 @@ from analysis import analyze_monthly_trends, analyze_category_performance, analy
 from visualizations import (
     plot_monthly_trends, plot_aov_trend, plot_top_categories_bar, plot_freight_ratio,
     plot_rfm_top_customers, plot_segment_distribution, plot_segment_pie,
-    create_customer_heatmap, create_seller_heatmap
+    create_customer_heatmap, create_seller_heatmap,
+    plot_gap_top_cities, plot_gap_no_seller_cities, plot_gap_comparison, plot_gap_categories_distribution
 )
 from insights import generate_trend_insights, generate_category_insights, generate_rfm_insights, generate_geospatial_insights
 
@@ -217,7 +218,7 @@ def render_question_4(filtered_orders):
         geolocation_df = load_geolocation_cached()
         sellers_df = load_sellers_cached()
 
-        customer_by_city, seller_by_city, customer_geo, gap_df = prepare_geospatial_data(
+        customer_by_city, seller_by_city, customer_geo, gap_df, gap_with_sellers, gap_without_sellers, gap_plot = prepare_geospatial_data(
             filtered_orders, geolocation_df, sellers_df
         )
 
@@ -247,15 +248,57 @@ def render_question_4(filtered_orders):
         st_folium(seller_map, width=1200, height=500)
 
         st.subheader("📊 Analisis Gap Supply-Demand")
-        top_gap = gap_df.nlargest(10, 'gap_ratio')
+
+        # Metrics summary
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Kota dengan Seller", f"{len(gap_with_sellers):,}")
+        with col2:
+            st.metric("Kota Tanpa Seller", f"{len(gap_without_sellers):,}")
+        with col3:
+            avg_gap = gap_with_sellers['orders_per_seller'].mean() if len(gap_with_sellers) > 0 else 0
+            st.metric("Rata-rata Gap", f"{avg_gap:.2f} orders/seller")
+        with col4:
+            high_gap_count = len(gap_with_sellers[gap_with_sellers['orders_per_seller'] > 50]) if len(gap_with_sellers) > 0 else 0
+            st.metric("Kota Gap Tinggi (>50)", f"{high_gap_count:,}")
+
+        # Top 20 Kota dengan Gap Tertinggi
         st.plotly_chart(
-            plot_top_categories_bar(top_gap, 'gap_ratio', 'customer_city',
-                                   "Top 10 Kota dengan Gap Supply-Demand Tertinggi (Orders/Seller)",
-                                   "Rasio Orders per Seller", '#FF6B6B'),
+            plot_gap_top_cities(gap_with_sellers, top_n=20),
             use_container_width=True
         )
 
+        # Top 10 Kota Tanpa Seller
+        if len(gap_without_sellers) > 0:
+            st.plotly_chart(
+                plot_gap_no_seller_cities(gap_without_sellers, top_n=10),
+                use_container_width=True
+            )
+
+        # Comparison Chart dan Gap Categories Distribution
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(
+                plot_gap_comparison(gap_with_sellers, top_n=10),
+                use_container_width=True
+            )
+        with col2:
+            st.plotly_chart(
+                plot_gap_categories_distribution(gap_plot),
+                use_container_width=True
+            )
+
+        # Ringkasan statistik
+        with st.expander("📊 Ringkasan Statistik Gap Supply-Demand"):
+            st.write(f"**Total {len(gap_with_sellers)} kota dengan seller dianalisis**")
+            st.write(f"**{len(gap_without_sellers)} kota tanpa seller (peluang ekspansi)**")
+            if len(gap_with_sellers) > 0:
+                st.write(f"**Rata-rata gap: {gap_with_sellers['orders_per_seller'].mean():.2f} orders/seller**")
+                st.write(f"**{len(gap_with_sellers[gap_with_sellers['orders_per_seller'] > 50])} kota dengan gap tinggi (>50)**")
+                st.write(f"**{len(gap_with_sellers[gap_with_sellers['orders_per_seller'] > 100])} kota dengan gap sangat tinggi (>100)**")
+
         with st.expander("📝 Insight Analisis"):
+            top_gap = gap_df.nlargest(10, 'gap_ratio')
             st.markdown(generate_geospatial_insights(top_cities, top_sellers, top_gap))
 
     except Exception as e:
